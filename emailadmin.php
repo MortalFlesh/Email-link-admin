@@ -24,7 +24,7 @@ if (!$validator->validIps($validIps)) {
     $http->forbidden();
 }
 
-$admin = new Admin(new Database($dbConfig), new Render(), $http, new FlashMessages());
+$admin = new Admin(new Database($dbConfig), new Uploader(), new Render(), $http, new FlashMessages());
 $admin
     ->handleRequest()
     ->renderPage();
@@ -86,6 +86,9 @@ class Admin
     /** @var Database */
     private $database;
 
+    /** @var Uploader */
+    private $uploader;
+
     /** @var Render */
     private $render;
 
@@ -97,13 +100,20 @@ class Admin
 
     /**
      * @param Database $database
+     * @param Uploader $uploader
      * @param Render $render
      * @param Http $http
      * @param FlashMessages $flashMessages
      */
-    public function __construct(Database $database, Render $render, Http $http, FlashMessages $flashMessages)
-    {
+    public function __construct(
+        Database $database,
+        Uploader $uploader,
+        Render $render,
+        Http $http,
+        FlashMessages $flashMessages
+    ) {
         $this->database = $database;
+        $this->uploader = $uploader;
         $this->render = $render;
         $this->http = $http;
         $this->flashMessages = $flashMessages;
@@ -114,11 +124,23 @@ class Admin
         $data = $_POST;
 
         if (!empty($data) && $data['save']) {
+            $isUploaded = false;
+
             $emailLink = new EmailLinkEntity();
             $emailLink->setUrl($data['url']);
 
+            if ($this->uploader->isFileUploading()) {
+                $imageName = $this->uploader
+                    ->uploadImage()
+                    ->getImageName();
+
+                $emailLink->setImage($imageName);
+
+                $isUploaded = true;
+            }
+
             try {
-                $this->database->saveAdminLink($emailLink);
+                $this->database->saveAdminLink($emailLink, $isUploaded);
 
                 $this->flashMessages->addSuccess('Uloženo v pořádku.');
             } catch (\Exception $e) {
@@ -177,8 +199,28 @@ class Database
 
     /**
      * @param EmailLinkEntity $emailLink
+     * @param bool $isUploaded
      */
-    public function saveAdminLink(EmailLinkEntity $emailLink)
+    public function saveAdminLink(EmailLinkEntity $emailLink, $isUploaded)
+    {
+        $url = $emailLink->getUrl();
+        $image = $emailLink->getImage();
+
+        $stmt = $isUploaded ? $this->getSaveStmt($url, $image) : $this->getSaveStmtForUrl($url);
+
+        $stmt->execute();
+
+        if ($stmt->errorCode() > 0) {
+            throw new \Exception('Při uložení se vysytla chyba.');
+        }
+    }
+
+    /**
+     * @param string $url
+     * @param string $image
+     * @return PDOStatement
+     */
+    private function getSaveStmt($url, $image)
     {
         $stmt = $this->pdo->prepare('
             INSERT INTO emaillink (id, url, image)
@@ -188,14 +230,28 @@ class Database
                 image = VALUES(image)
         ');
 
-        $stmt->bindParam(':url', $emailLink->getUrl());
-        $stmt->bindParam(':image', $emailLink->getImage());
+        $stmt->bindParam(':url', $url);
+        $stmt->bindParam(':image', $image);
 
-        $stmt->execute();
+        return $stmt;
+    }
 
-        if (!empty($stmt->errorInfo())) {
-            throw new \Exception('Při uložení se vysytla chyba.');
-        }
+    /**
+     * @param string $url
+     * @return PDOStatement
+     */
+    private function getSaveStmtForUrl($url)
+    {
+        $stmt = $this->pdo->prepare('
+            INSERT INTO emaillink (id, url)
+            VALUES (1, :url)
+            ON DUPLICATE KEY UPDATE
+                url = VALUES(url)
+        ');
+
+        $stmt->bindParam(':url', $url);
+
+        return $stmt;
     }
 }
 
@@ -258,10 +314,11 @@ class Render
      */
     public function renderFlashMessages(array $flashMessages)
     {
-        foreach($flashMessages as $message) {
+        foreach ($flashMessages as $message) {
             ?>
-            <div style="padding: 10px; color: <?php echo $message->getType() === FlashMessage::SUCCESS ? 'green' : 'red' ?>;">
-                <strong><?php echo $message->getMsg()?></strong>
+            <div
+                style="padding: 10px; color: <?php echo $message->getType() === FlashMessage::SUCCESS ? 'green' : 'red' ?>;">
+                <strong><?php echo $message->getMsg() ?></strong>
             </div>
             <?php
         }
@@ -381,5 +438,56 @@ class FlashMessage
     public function getType()
     {
         return $this->type;
+    }
+}
+
+class Uploader
+{
+    const IMAGE_NAME = 'image';
+
+    /** @var string */
+    private $extension;
+
+    /**
+     * @return bool
+     */
+    public function isFileUploading()
+    {
+        return !empty($_FILES['image']) && is_array($_FILES['image']) && !empty($_FILES['image']['tmp_name']);
+    }
+
+    /**
+     * @return self
+     */
+    public function uploadImage()
+    {
+        $image = $_FILES['image'];
+
+        $this->extension = $this->getExtension($image);
+        $path = __DIR__;
+        $fullpath = $path . DIRECTORY_SEPARATOR . $this->getImageName();
+
+        move_uploaded_file($image['tmp_name'], $fullpath);
+
+        return $this;
+    }
+
+    /**
+     * @param array $image
+     * @return string
+     */
+    private function getExtension(array $image)
+    {
+        $ext = explode('.', $image['name']);
+
+        return strtolower(array_pop($ext));
+    }
+
+    /**
+     * @return string
+     */
+    public function getImageName()
+    {
+        return self::IMAGE_NAME . '.' . $this->extension;
     }
 }
