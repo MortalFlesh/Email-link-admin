@@ -79,6 +79,19 @@ class Http
         header('Location: ' . $url);
         exit;
     }
+
+    /**
+     * @return string
+     */
+    public function getCurrentLocation()
+    {
+        $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+
+        $parts = explode('/', $url);
+        array_pop($parts);
+
+        return 'http://' . implode('/', $parts) . '/';
+    }
 }
 
 class Admin
@@ -155,10 +168,17 @@ class Admin
 
     public function renderPage()
     {
+        $emailLink = $this->database->loadEmailLink();
+
+        $host = $this->http->getCurrentLocation();
+
         $this->render
             ->renderTitle()
             ->renderFlashMessages($this->flashMessages->getMessages())
-            ->renderForm($this->database->loadEmailLink());
+            ->renderForm($emailLink)
+            ->renderSeparator()
+            ->renderUsage($host . 'link.php', $host . 'image.php')
+            ->renderPreview($emailLink);
     }
 }
 
@@ -353,6 +373,77 @@ class Render
             </div>
         </form>
         <?php
+
+        return $this;
+    }
+
+    /**
+     * @param string $link
+     * @param string $imgSrc
+     * @return $this
+     */
+    public function renderUsage($link, $imgSrc)
+    {
+        ?>
+        <div>
+            <div style="padding-top: 10px;">
+                <label>
+                    <strong>Link k vložení do e-mailu:</strong>
+                    <input type="text" value="<?php echo $link ?>" readonly style="width: 100%;"/>
+                </label>
+            </div>
+
+            <div style="padding-top: 10px;">
+                <label>
+                    <strong>Zdroj obrázku k vložení do e-mailu:</strong>
+                    <input type="text" value="<?php echo $imgSrc ?>" readonly style="width: 100%;"/>
+                </label>
+            </div>
+
+            <div style="padding-top: 10px;">
+                <label>
+                    <strong>Možné použití v e-mailu:</strong>
+                    <br>
+                    <textarea readonly style="height: 60px; width: 400px;"><?php
+?><a href="<?php echo $link ?>">
+    <img src="<?php echo $imgSrc ?>">
+</a><?php
+                    ?></textarea>
+                </label>
+            </div>
+        </div>
+        <?php
+
+        return $this;
+    }
+
+    /**
+     * @param EmailLinkEntity $emailLink
+     * @return self
+     */
+    public function renderPreview(EmailLinkEntity $emailLink)
+    {
+        ?>
+        <div>
+            <h3>Aktuální obrázek</h3>
+
+            <div>
+                <img src="./<?php echo $emailLink->getImage() ?>"
+            </div>
+        </div>
+        <?php
+
+        return $this;
+    }
+
+    /**
+     * @return self
+     */
+    public function renderSeparator()
+    {
+        ?>
+        <hr style="margin: 20px 0;"><?php
+
         return $this;
     }
 }
