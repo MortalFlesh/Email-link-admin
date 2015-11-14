@@ -59,6 +59,28 @@ class Http
 
         return 'http://' . implode('/', $parts) . '/';
     }
+
+    /**
+     * @return self
+     */
+    public function image()
+    {
+        header('Content-type: image/jpeg');
+
+        return $this;
+    }
+
+    /**
+     * @return self
+     */
+    public function noCache()
+    {
+        header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+        header("Cache-Control: post-check=0, pre-check=0", false);
+        header("Pragma: no-cache");
+
+        return $this;
+    }
 }
 
 class Admin
@@ -372,10 +394,10 @@ class Render
                     <strong>Možné použití v e-mailu:</strong>
                     <br>
                     <textarea readonly style="height: 60px; width: 400px;"><?php
-?><a href="<?php echo $link ?>">
-    <img src="<?php echo $imgSrc ?>">
-</a><?php
-?></textarea>
+                        ?><a href="<?php echo $link ?>">
+                            <img src="<?php echo $imgSrc ?>">
+                        </a><?php
+                        ?></textarea>
                 </label>
             </div>
         </div>
@@ -547,5 +569,60 @@ class Uploader
     public function getImageName()
     {
         return self::IMAGE_NAME . '.' . $this->extension;
+    }
+}
+
+class Link
+{
+    /** @var Database */
+    private $database;
+
+    /** @var Http */
+    private $http;
+
+    /**
+     * @param Database $database
+     * @param Http $http
+     */
+    public function __construct(Database $database, Http $http)
+    {
+        $this->database = $database;
+        $this->http = $http;
+    }
+
+    public function redirectToLink()
+    {
+        $emailLink = $this->database->loadEmailLink();
+
+        $this->http->redirect($emailLink->getUrl());
+    }
+}
+
+class Image {
+    /** @var Database */
+    private $database;
+
+    /** @var Http */
+    private $http;
+
+    /**
+     * @param Database $database
+     * @param Http $http
+     */
+    public function __construct(Database $database, Http $http)
+    {
+        $this->database = $database;
+        $this->http = $http;
+    }
+
+    public function renderImage()
+    {
+        $emailLink = $this->database->loadEmailLink();
+
+        $this->http
+            ->image()
+            ->noCache();
+
+        echo file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . $emailLink->getImage());
     }
 }
