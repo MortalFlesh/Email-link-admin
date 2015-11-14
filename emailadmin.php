@@ -117,9 +117,14 @@ class Admin
             $emailLink = new EmailLinkEntity();
             $emailLink->setUrl($data['url']);
 
-            $this->database->saveAdminLink($emailLink);
+            try {
+                $this->database->saveAdminLink($emailLink);
 
-            $this->flashMessages->addSuccess('Uloženo v pořádku.');
+                $this->flashMessages->addSuccess('Uloženo v pořádku.');
+            } catch (\Exception $e) {
+                $this->flashMessages->addError($e->getMessage());
+            }
+
             $this->http->redirect($_SERVER['HTTP_REFERER']);
         }
 
@@ -157,9 +162,17 @@ class Database
      */
     public function loadEmailLink()
     {
-        // todo
+        $emailLink = new EmailLinkEntity();
 
-        return new EmailLinkEntity();
+        $stmt = $this->pdo->prepare('SELECT url, image FROM emaillink WHERE id = 1');
+        $stmt->execute();
+
+        $data = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        $emailLink->setUrl($data['url']);
+        $emailLink->setImage($data['image']);
+
+        return $emailLink;
     }
 
     /**
@@ -179,6 +192,10 @@ class Database
         $stmt->bindParam(':image', $emailLink->getImage());
 
         $stmt->execute();
+
+        if (!empty($stmt->errorInfo())) {
+            throw new \Exception('Při uložení se vysytla chyba.');
+        }
     }
 }
 
