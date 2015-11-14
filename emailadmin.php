@@ -82,7 +82,7 @@ class Admin
 
         $this->render
             ->renderTitle()
-            ->renderForm($emailLink->getUrl());
+            ->renderForm($emailLink);
     }
 }
 
@@ -145,21 +145,28 @@ class Render
     }
 
     /**
+     * @param EmailLinkEntity $emailLink
      * @return self
      */
-    public function renderForm($url)
+    public function renderForm(EmailLinkEntity $emailLink)
     {
         ?>
-        <form action="emailadmin.php" method="post">
-            <div>
+        <form action="" method="post" enctype="multipart/form-data">
+            <div style="padding-top: 10px;">
                 <label>
-                    URL:
-                    <input type="text" name="url" value="<?php echo $url ?>" style="width: 95%;"/>
+                    Nastavit nový:
+                    <input type="file" name="image"/>
                 </label>
             </div>
 
-            <div>
-                <br>
+            <div style="padding-top: 10px;">
+                <label>
+                    URL:
+                    <input type="text" name="url" value="<?php echo $emailLink->getUrl() ?>" style="width: 95%;"/>
+                </label>
+            </div>
+
+            <div style="padding-top: 10px;">
                 <input type="submit" name="save" value="Potvrdit"/>
             </div>
         </form>
