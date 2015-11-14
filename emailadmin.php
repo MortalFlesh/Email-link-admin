@@ -114,6 +114,11 @@ class Admin
         $data = $_POST;
 
         if (!empty($data) && $data['save']) {
+            $emailLink = new EmailLinkEntity();
+            $emailLink->setUrl($data['url']);
+
+            $this->database->saveAdminLink($emailLink);
+
             $this->flashMessages->addSuccess('Uloženo v pořádku.');
             $this->http->redirect($_SERVER['HTTP_REFERER']);
         }
@@ -132,15 +137,19 @@ class Admin
 
 class Database
 {
-    /** @var array */
-    private $dbConfig;
+    /** @var PDO */
+    private $pdo;
 
     /**
-     * @param $dbConfig
+     * @param array $dbConfig
      */
-    public function __construct($dbConfig)
+    public function __construct(array $dbConfig)
     {
-        $this->dbConfig = $dbConfig;
+        $this->pdo = new PDO(
+            sprintf('mysql:host=%s;dbname=%s', $dbConfig['host'], $dbConfig['dbname']),
+            $dbConfig['username'],
+            $dbConfig['password']
+        );
     }
 
     /**
@@ -152,12 +161,34 @@ class Database
 
         return new EmailLinkEntity();
     }
+
+    /**
+     * @param EmailLinkEntity $emailLink
+     */
+    public function saveAdminLink(EmailLinkEntity $emailLink)
+    {
+        $stmt = $this->pdo->prepare('
+            INSERT INTO emaillink (id, url, image)
+            VALUES (1, :url, :image)
+            ON DUPLICATE KEY UPDATE
+                url = VALUES(url),
+                image = VALUES(image)
+        ');
+
+        $stmt->bindParam(':url', $emailLink->getUrl());
+        $stmt->bindParam(':image', $emailLink->getImage());
+
+        $stmt->execute();
+    }
 }
 
 class EmailLinkEntity
 {
     /** @var string */
     private $url = '';
+
+    /** @var string */
+    private $image = '';
 
     /**
      * @return string
@@ -172,7 +203,23 @@ class EmailLinkEntity
      */
     public function setUrl($url)
     {
-        $this->url = $url;
+        $this->url = trim($url);
+    }
+
+    /**
+     * @return string
+     */
+    public function getImage()
+    {
+        return $this->image;
+    }
+
+    /**
+     * @param string $image
+     */
+    public function setImage($image)
+    {
+        $this->image = $image;
     }
 }
 
