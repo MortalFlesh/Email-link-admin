@@ -162,12 +162,14 @@ class Admin
         $host = $this->http->getCurrentLocation();
 
         $this->render
+            ->renderHeader()
             ->renderTitle()
             ->renderFlashMessages($this->flashMessages->getMessages())
             ->renderForm($emailLink)
             ->renderSeparator()
             ->renderUsage($host . 'link.php', $host . 'image.php')
-            ->renderPreview($emailLink);
+            ->renderPreview($emailLink)
+            ->renderFooter();
     }
 }
 
@@ -310,6 +312,22 @@ class Render
     /**
      * @return self
      */
+    public function renderHeader()
+    {
+        ?><!DOCTYPE html>
+        <html lang="cs">
+        <head>
+            <title>Emailadmin</title>
+            <meta charset="UTF-8">
+        </head>
+        <body><?php
+
+        return $this;
+    }
+
+    /**
+     * @return self
+     */
     public function renderTitle()
     {
         ?><h1>Soubory do e-mailů</h1><?php
@@ -393,10 +411,10 @@ class Render
                 <label>
                     <strong>Možné použití v e-mailu:</strong>
                     <br>
-                    <textarea readonly style="height: 60px; width: 400px;"><?php
-                        ?><a href="<?php echo $link ?>">
-                            <img src="<?php echo $imgSrc ?>">
-                        </a><?php
+                    <textarea readonly style="height: 100px; width: 500px;"><?php
+?><a href="<?php echo $link ?>">
+    <img src="<?php echo $imgSrc ?>">
+</a><?php
                         ?></textarea>
                 </label>
             </div>
@@ -432,6 +450,16 @@ class Render
     {
         ?>
         <hr style="margin: 20px 0;"><?php
+
+        return $this;
+    }
+
+    /**
+     * @return self
+     */
+    public function renderFooter()
+    {
+        ?></body></html><?php
 
         return $this;
     }
