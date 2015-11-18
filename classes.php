@@ -459,7 +459,16 @@ class FlashMessages
      */
     public function addSuccess($msg)
     {
-        $this->flashMassages[] = new FlashMessage($msg, FlashMessage::SUCCESS);
+        $this->addFlash(new FlashMessage($msg, FlashMessage::SUCCESS));
+
+    }
+
+    /**
+     * @param FlashMessage $flashMessage
+     */
+    private function addFlash(FlashMessage $flashMessage)
+    {
+        $this->flashMassages[] = $flashMessage->serialize();
     }
 
     /**
@@ -467,7 +476,7 @@ class FlashMessages
      */
     public function addError($msg)
     {
-        $this->flashMassages[] = new FlashMessage($msg, FlashMessage::ERROR);
+        $this->addFlash(new FlashMessage($msg, FlashMessage::ERROR));
     }
 
     /**
@@ -475,7 +484,9 @@ class FlashMessages
      */
     public function getMessages()
     {
-        $flashMessages = $this->flashMassages;
+        $flashMessages = array_map(function (array $data) {
+            return FlashMessage::deserialize($data);
+        }, $this->flashMassages);
 
         $this->flashMassages = [];
 
@@ -518,6 +529,26 @@ class FlashMessage
     public function getType()
     {
         return $this->type;
+    }
+
+    /**
+     * @return array
+     */
+    public function serialize()
+    {
+        return [
+            'msg' => $this->msg,
+            'type' => $this->type,
+        ];
+    }
+
+    /**
+     * @param array $data
+     * @return self
+     */
+    public static function deserialize(array $data)
+    {
+        return new self($data['msg'], $data['type']);
     }
 }
 
@@ -598,7 +629,8 @@ class Link
     }
 }
 
-class Image {
+class Image
+{
     /** @var Database */
     private $database;
 
