@@ -61,11 +61,12 @@ class Http
     }
 
     /**
+     * @param string $mimeType
      * @return self
      */
-    public function image()
+    public function image($mimeType)
     {
-        header('Content-type: image/jpeg');
+        header(sprintf('Content-type: %s', $mimeType));
 
         return $this;
     }
@@ -602,24 +603,13 @@ class Uploader
     {
         $image = $_FILES['image'];
 
-        $this->extension = $this->getExtension($image);
+        $this->extension = Image::getExtension($image);
         $path = __DIR__;
         $fullpath = $path . DIRECTORY_SEPARATOR . $this->getImageName();
 
         move_uploaded_file($image['tmp_name'], $fullpath);
 
         return $this;
-    }
-
-    /**
-     * @param array $image
-     * @return string
-     */
-    private function getExtension(array $image)
-    {
-        $ext = explode('.', $image['name']);
-
-        return strtolower(array_pop($ext));
     }
 
     /**
@@ -675,14 +665,45 @@ class Image
         $this->http = $http;
     }
 
+    /**
+     * @param array|string $image
+     * @return string
+     */
+    public static function getExtension($image)
+    {
+        $imageName = is_array($image) ? $image['name'] : $image;
+
+        $ext = explode('.', $imageName);
+
+        return strtolower(array_pop($ext));
+    }
+
     public function renderImage()
     {
         $emailLink = $this->database->loadEmailLink();
+        $imageName = $emailLink->getImage();
+        $mimeType = $this->getMimeType($imageName);
 
         $this->http
-            ->image()
+            ->image($mimeType)
             ->noCache();
 
-        echo file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . $emailLink->getImage());
+        echo file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . $imageName);
+    }
+
+    /**
+     * @param string $imageName
+     * @return string
+     */
+    private function getMimeType($imageName)
+    {
+        $extension = self::getExtension($imageName);
+
+        switch ($extension) {
+            case 'jpg':
+                return 'image/jpeg';
+            default:
+                return sprintf('image/%s', $extension);
+        }
     }
 }
