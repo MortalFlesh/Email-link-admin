@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'Render.php';
+
 class Validator
 {
     /**
@@ -82,6 +84,17 @@ class Http
 
         return $this;
     }
+
+    /**
+     * @param array $data
+     */
+    public function jsonResponse(array $data)
+    {
+        $json = json_encode($data);
+
+        echo $json;
+        exit;
+    }
 }
 
 class Admin
@@ -100,6 +113,9 @@ class Admin
 
     /** @var FlashMessages */
     private $flashMessages;
+
+    /** @var int */
+    private $selectedProfile = 1;
 
     /**
      * @param Database $database
@@ -122,20 +138,51 @@ class Admin
         $this->flashMessages = $flashMessages;
     }
 
+    /**
+     * @return self
+     */
     public function handleRequest()
     {
-        $data = $_POST;
+        $post = $_POST;
+        $get = $_GET;
 
-        if (!empty($data) && $data['save']) {
+        if (!empty($get)) {
+            $this->handleGet($get);
+        }
+
+        if (!empty($post)) {
+            $this->handlePost($post);
+        }
+
+        return $this;
+    }
+
+    /**
+     * @param array $get
+     */
+    private function handleGet(array $get)
+    {
+        if (isset($get['profile'])) {
+            $this->selectedProfile = (int) $get['profile'];
+        }
+    }
+
+    /**
+     * @param array $post
+     */
+    private function handlePost(array $post)
+    {
+        if ($post['save']) {
             $isUploaded = false;
 
             $emailLink = new EmailLinkEntity();
-            $emailLink->setUrl($data['url']);
+            $emailLink->setUrl($post['url']);
+            $emailLink->setProfileId($this->selectedProfile);
 
             if ($this->uploader->isFileUploading()) {
                 $imageName = $this->uploader
-                    ->uploadImage()
-                    ->getImageName();
+                    ->uploadImage($this->selectedProfile)
+                    ->getImageName($this->selectedProfile);
 
                 $emailLink->setImage($imageName);
 
@@ -151,14 +198,24 @@ class Admin
             }
 
             $this->http->redirect($_SERVER['HTTP_REFERER']);
-        }
+        } elseif (array_key_exists('action', $post) && $post['action'] === 'add-profile') {
+            $newProfileName = $post['profile'];
 
-        return $this;
+            if (!empty($newProfileName)) {
+                $profile = $this->database->addNewProfile($newProfileName);
+                $this->flashMessages->addSuccess('Profil byl vytvořen.');
+
+                $this->http->jsonResponse(['status' => 'ok', 'id' => $profile->getId()]);
+            } else {
+                $this->http->jsonResponse(['status' => 'error']);
+            }
+        }
     }
 
     public function renderPage()
     {
-        $emailLink = $this->database->loadEmailLink();
+        $profiles = $this->database->loadProfiles();
+        $emailLink = $this->database->loadEmailLink($this->selectedProfile);
 
         $host = $this->http->getCurrentLocation();
 
@@ -166,9 +223,13 @@ class Admin
             ->renderHeader()
             ->renderTitle()
             ->renderFlashMessages($this->flashMessages->getMessages())
+            ->renderProfileSelector($profiles, $this->selectedProfile)
             ->renderForm($emailLink)
             ->renderSeparator()
-            ->renderUsage($host . 'link.php', $host . 'image.php')
+            ->renderUsage(
+                $host . 'link.php?p=' . $this->selectedProfile,
+                $host . 'image.php?p=' . $this->selectedProfile
+            )
             ->renderPreview($emailLink)
             ->renderFooter();
     }
@@ -192,13 +253,34 @@ class Database
     }
 
     /**
+     * @return ProfileEntity[]
+     */
+    public function loadProfiles()
+    {
+        $profiles = [];
+
+        $stmt = $this->pdo->prepare('SELECT id, title FROM profile ORDER BY title');
+        $stmt->execute();
+
+        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($data as $item) {
+            $profiles[] = new ProfileEntity($item['id'], $item['title']);
+        }
+
+        return $profiles;
+    }
+
+    /**
+     * @param int $selectedProfile
      * @return EmailLinkEntity
      */
-    public function loadEmailLink()
+    public function loadEmailLink($selectedProfile)
     {
         $emailLink = new EmailLinkEntity();
 
-        $stmt = $this->pdo->prepare('SELECT url, image FROM emaillink WHERE id = 1');
+        $stmt = $this->pdo->prepare('SELECT url, image FROM emaillink WHERE profile_id = :profile');
+        $stmt->bindParam(':profile', $selectedProfile);
         $stmt->execute();
 
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -217,13 +299,15 @@ class Database
     {
         $url = $emailLink->getUrl();
         $image = $emailLink->getImage();
+        $profile = $emailLink->getProfileId();
 
         $stmt = $isUploaded ? $this->getSaveStmt($url, $image) : $this->getSaveStmtForUrl($url);
+        $stmt->bindParam(':profile', $profile);
 
         $stmt->execute();
 
         if ($stmt->errorCode() > 0) {
-            throw new \Exception('Při uložení se vysytla chyba.');
+            throw new \Exception('Při uložení se vyskytla chyba.');
         }
     }
 
@@ -235,8 +319,8 @@ class Database
     private function getSaveStmt($url, $image)
     {
         $stmt = $this->pdo->prepare('
-            INSERT INTO emaillink (id, url, image)
-            VALUES (1, :url, :image)
+            INSERT INTO emaillink (profile_id, url, image)
+            VALUES (:profile, :url, :image)
             ON DUPLICATE KEY UPDATE
             url = VALUES(url),
             image = VALUES(image)
@@ -255,8 +339,8 @@ class Database
     private function getSaveStmtForUrl($url)
     {
         $stmt = $this->pdo->prepare('
-            INSERT INTO emaillink (id, url)
-            VALUES (1, :url)
+            INSERT INTO emaillink (profile_id, url, image)
+            VALUES (:profile, :url, "")
             ON DUPLICATE KEY UPDATE
             url = VALUES(url)
         ');
@@ -264,6 +348,26 @@ class Database
         $stmt->bindParam(':url', $url);
 
         return $stmt;
+    }
+
+    /**
+     * @param string $newProfileName
+     * @return ProfileEntity
+     */
+    public function addNewProfile($newProfileName)
+    {
+        $stmt = $this->pdo->prepare('INSERT INTO profile (title) VALUES (:title)');
+        $stmt->bindParam(':title', $newProfileName);
+        $stmt->execute();
+
+        $newProfileId = $this->pdo->lastInsertId();
+
+        $stmt = $this->pdo->prepare('SELECT id, title FROM profile WHERE id = :id');
+        $stmt->bindParam(':id', $newProfileId);
+        $stmt->execute();
+        $data = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return new ProfileEntity($data['id'], $data['title']);
     }
 }
 
@@ -274,6 +378,9 @@ class EmailLinkEntity
 
     /** @var string */
     private $image = '';
+
+    /** @var int */
+    private $profileId = 1;
 
     /**
      * @return string
@@ -306,165 +413,24 @@ class EmailLinkEntity
     {
         $this->image = $image;
     }
-}
 
-class Render
-{
     /**
-     * @return self
+     * @return int
      */
-    public function renderHeader()
+    public function getProfileId()
     {
-        ?><!DOCTYPE html>
-        <html lang="cs">
-        <head>
-            <title>Emailadmin</title>
-            <meta charset="UTF-8">
-        </head>
-        <body><?php
-
-        return $this;
+        return $this->profileId;
     }
 
     /**
-     * @return self
+     * @param int $profileId
      */
-    public function renderTitle()
+    public function setProfileId($profileId)
     {
-        ?><h1>Soubory do e-mailů</h1><?php
-
-        return $this;
-    }
-
-    /**
-     * @param FlashMessage[] $flashMessages
-     * @return self
-     */
-    public function renderFlashMessages(array $flashMessages)
-    {
-        foreach ($flashMessages as $message) {
-            ?>
-            <div
-                style="padding: 10px; color: <?php echo $message->getType() === FlashMessage::SUCCESS ? 'green' : 'red' ?>;">
-                <strong><?php echo $message->getMsg() ?></strong>
-            </div>
-            <?php
-        }
-
-        return $this;
-    }
-
-    /**
-     * @param EmailLinkEntity $emailLink
-     * @return self
-     */
-    public function renderForm(EmailLinkEntity $emailLink)
-    {
-        ?>
-        <form action="" method="post" enctype="multipart/form-data">
-            <div style="padding-top: 10px;">
-                <label>
-                    Nastavit nový:
-                    <input type="file" name="image"/>
-                </label>
-            </div>
-
-            <div style="padding-top: 10px;">
-                <label>
-                    URL:
-                    <input type="text" name="url" value="<?php echo $emailLink->getUrl() ?>" style="width: 95%;"/>
-                </label>
-            </div>
-
-            <div style="padding-top: 10px;">
-                <input type="submit" name="save" value="Potvrdit"/>
-            </div>
-        </form>
-        <?php
-
-        return $this;
-    }
-
-    /**
-     * @param string $link
-     * @param string $imgSrc
-     * @return $this
-     */
-    public function renderUsage($link, $imgSrc)
-    {
-        ?>
-        <div>
-            <div style="padding-top: 10px;">
-                <label>
-                    <strong>Link k vložení do e-mailu:</strong>
-                    <input type="text" value="<?php echo $link ?>" readonly style="width: 100%;"/>
-                </label>
-            </div>
-
-            <div style="padding-top: 10px;">
-                <label>
-                    <strong>Zdroj obrázku k vložení do e-mailu:</strong>
-                    <input type="text" value="<?php echo $imgSrc ?>" readonly style="width: 100%;"/>
-                </label>
-            </div>
-
-            <div style="padding-top: 10px;">
-                <label>
-                    <strong>Možné použití v e-mailu:</strong>
-                    <br>
-                    <textarea readonly style="height: 100px; width: 500px;"><?php
-?><a href="<?php echo $link ?>">
-    <img src="<?php echo $imgSrc ?>">
-</a><?php
-                        ?></textarea>
-                </label>
-            </div>
-        </div>
-        <?php
-
-        return $this;
-    }
-
-    /**
-     * @param EmailLinkEntity $emailLink
-     * @return self
-     */
-    public function renderPreview(EmailLinkEntity $emailLink)
-    {
-        ?>
-        <div>
-            <h3>Aktuální obrázek</h3>
-
-            <div>
-                <img src="./<?php echo $emailLink->getImage() ?>"
-            </div>
-        </div>
-        <?php
-
-        return $this;
-    }
-
-    /**
-     * @return self
-     */
-    public function renderSeparator()
-    {
-        ?>
-        <hr style="margin: 20px 0;"><?php
-
-        return $this;
-    }
-
-    /**
-     * @return self
-     */
-    public function renderFooter()
-    {
-        ?></body></html><?php
-
-        return $this;
+        $this->profileId = (int) $profileId;
     }
 }
+
 
 class FlashMessages
 {
@@ -489,7 +455,6 @@ class FlashMessages
     public function addSuccess($msg)
     {
         $this->addFlash(new FlashMessage($msg, FlashMessage::SUCCESS));
-
     }
 
     /**
@@ -597,15 +562,16 @@ class Uploader
     }
 
     /**
+     * @param int $profile
      * @return self
      */
-    public function uploadImage()
+    public function uploadImage($profile)
     {
         $image = $_FILES['image'];
 
         $this->extension = Image::getExtension($image);
         $path = __DIR__;
-        $fullpath = $path . DIRECTORY_SEPARATOR . $this->getImageName();
+        $fullpath = $path . DIRECTORY_SEPARATOR . $this->getImageName($profile);
 
         move_uploaded_file($image['tmp_name'], $fullpath);
 
@@ -613,11 +579,12 @@ class Uploader
     }
 
     /**
+     * @param int $profile
      * @return string
      */
-    public function getImageName()
+    public function getImageName($profile)
     {
-        return self::IMAGE_NAME . '.' . $this->extension;
+        return $profile . '_' . self::IMAGE_NAME . '.' . $this->extension;
     }
 }
 
@@ -639,9 +606,12 @@ class Link
         $this->http = $http;
     }
 
-    public function redirectToLink()
+    /**
+     * @param int $profile
+     */
+    public function redirectToLink($profile)
     {
-        $emailLink = $this->database->loadEmailLink();
+        $emailLink = $this->database->loadEmailLink($profile);
 
         $this->http->redirect($emailLink->getUrl());
     }
@@ -678,9 +648,12 @@ class Image
         return strtolower(array_pop($ext));
     }
 
-    public function renderImage()
+    /**
+     * @param int $profile
+     */
+    public function renderImage($profile)
     {
-        $emailLink = $this->database->loadEmailLink();
+        $emailLink = $this->database->loadEmailLink($profile);
         $imageName = $emailLink->getImage();
         $mimeType = $this->getMimeType($imageName);
 
@@ -705,5 +678,40 @@ class Image
             default:
                 return sprintf('image/%s', $extension);
         }
+    }
+}
+
+class ProfileEntity
+{
+    /** @var int */
+    private $id;
+
+    /** @var string */
+    private $title;
+
+    /**
+     * @param int $id
+     * @param string $title
+     */
+    public function __construct($id, $title)
+    {
+        $this->id = (int) $id;
+        $this->title = (string) $title;
+    }
+
+    /**
+     * @return int
+     */
+    public function getId()
+    {
+        return $this->id;
+    }
+
+    /**
+     * @return string
+     */
+    public function getTitle()
+    {
+        return $this->title;
     }
 }
