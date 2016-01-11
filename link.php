@@ -4,4 +4,4 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'config.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'classes.php';
 
 $link = new Link(new Database($dbConfig), new Http());
-$link->redirectToLink();
+$link->redirectToLink((int) $_GET['p']);
