@@ -209,6 +209,33 @@ class Admin
             } else {
                 $this->http->jsonResponse(['status' => 'error']);
             }
+        } elseif (array_key_exists('action', $post) && $post['action'] === 'rename-profile') {
+            $profileId = (int) $post['profile'];
+            $newProfileName = $post['name'];
+
+            if ($profileId && !empty($newProfileName)) {
+                $this->database->renameProfile($profileId, $newProfileName);
+                $this->flashMessages->addSuccess('Profil byl přejmenován.');
+
+                $this->http->jsonResponse(['status' => 'ok', 'id' => $profileId]);
+            } else {
+                $this->http->jsonResponse(['status' => 'error']);
+            }
+        } elseif (array_key_exists('action', $post) && $post['action'] === 'remove-profile') {
+            $profileId = (int) $post['profile'];
+
+            if ($profileId) {
+                $profile = $this->database->loadEmailLink($profileId);
+
+                $this->database->removeProfile($profileId);
+                $this->uploader->removeImage($profile->getImage());
+
+                $this->flashMessages->addSuccess('Profil byl odstraněn.');
+
+                $this->http->jsonResponse(['status' => 'ok', 'id' => 1]);
+            } else {
+                $this->http->jsonResponse(['status' => 'error']);
+            }
         }
     }
 
@@ -246,10 +273,11 @@ class Database
     public function __construct(array $dbConfig)
     {
         $this->pdo = new PDO(
-            sprintf('mysql:host=%s;dbname=%s', $dbConfig['host'], $dbConfig['dbname']),
+            sprintf('mysql:host=%s;dbname=%s;charset=utf8', $dbConfig['host'], $dbConfig['dbname']),
             $dbConfig['username'],
             $dbConfig['password']
         );
+        $this->pdo->exec("set names utf8");
     }
 
     /**
@@ -368,6 +396,32 @@ class Database
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return new ProfileEntity($data['id'], $data['title']);
+    }
+
+    /**
+     * @param int $profileId
+     * @param string $newProfileName
+     */
+    public function renameProfile($profileId, $newProfileName)
+    {
+        $stmt = $this->pdo->prepare('UPDATE profile SET title = :title WHERE id = :id');
+        $stmt->bindParam(':title', $newProfileName);
+        $stmt->bindParam(':id', $profileId);
+        $stmt->execute();
+    }
+
+    /**
+     * @param int $profileId
+     */
+    public function removeProfile($profileId)
+    {
+        $stmt = $this->pdo->prepare('DELETE FROM emaillink WHERE profile_id = :id');
+        $stmt->bindParam(':id', $profileId);
+        $stmt->execute();
+
+        $stmt = $this->pdo->prepare('DELETE FROM profile WHERE id = :id');
+        $stmt->bindParam(':id', $profileId);
+        $stmt->execute();
     }
 }
 
@@ -585,6 +639,18 @@ class Uploader
     public function getImageName($profile)
     {
         return $profile . '_' . self::IMAGE_NAME . '.' . $this->extension;
+    }
+
+    /**
+     * @param string $imageName
+     */
+    public function removeImage($imageName)
+    {
+        $fullpath = __DIR__ . DIRECTORY_SEPARATOR . $imageName;
+
+        if (file_exists($fullpath)) {
+            unlink($fullpath);
+        }
     }
 }
 

@@ -55,17 +55,19 @@ class Render
     public function renderForm(EmailLinkEntity $emailLink)
     {
         ?>
+        <h2>Nastavení odkazů:</h2>
+
         <form action="" method="post" enctype="multipart/form-data">
             <div style="padding-top: 10px;">
                 <label>
-                    Nastavit nový:
+                    Nastavit nový obrázek:
                     <input type="file" name="image"/>
                 </label>
             </div>
 
             <div style="padding-top: 10px;">
                 <label>
-                    URL:
+                    URL adresa:
                     <input type="text" name="url" value="<?php echo $emailLink->getUrl() ?>" style="width: 95%;"/>
                 </label>
             </div>
@@ -153,8 +155,8 @@ class Render
     {
         ?>
         <div>
+            <h3>Vyberte profil:</h3>
             <form id="js-profile-form" method="get">
-                <h3>Vyberte profil:</h3>
                 <select name="profile" class="js-select-profile">
                     <?php
                     foreach ($profiles as $profile) {
@@ -166,9 +168,20 @@ class Render
                     }
                     ?>
                 </select>
-
-                <button type="button" id="js-profile-add">+ Přidat profil</button>
             </form>
+
+            <h3>Akce s profily:</h3>
+            <button type="button" id="js-profile-add">+ Přidat profil</button>
+            <br><br>
+
+            <button type="button" id="js-profile-rename" data-profile-id="<?php echo $selectedProfile;?>">
+                Přejmenovat aktuální profil
+            </button>
+            <br><br>
+
+            <button type="button" id="js-profile-remove" data-profile-id="<?php echo $selectedProfile;?>">
+                Odstranit aktuální profil
+            </button>
         </div>
         <?php
 
