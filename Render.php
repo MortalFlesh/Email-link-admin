@@ -50,20 +50,23 @@ class Render
 
     /**
      * @param EmailLinkEntity $emailLink
+     * @param string $host
+     * @param int $selectedProfile
      * @return self
      */
-    public function renderForm(EmailLinkEntity $emailLink)
+    public function renderForm(EmailLinkEntity $emailLink, $host, $selectedProfile)
     {
         ?>
-        <h2>Nastavení odkazů:</h2>
+        <h2>Uložení profilu:</h2>
 
         <form action="" method="post" enctype="multipart/form-data">
             <div style="padding-top: 10px;">
-                <label>
-                    Nastavit nový obrázek:
-                    <input type="file" name="image"/>
-                </label>
+                <input type="submit" name="save" value="Uložit profil"/>
             </div>
+
+            <?php $this->renderSeparator(); ?>
+
+            <h3>Nastavení odkazu:</h3>
 
             <div style="padding-top: 10px;">
                 <label>
@@ -72,8 +75,22 @@ class Render
                 </label>
             </div>
 
+            <?php
+            $this
+                ->renderUsage(
+                    $host . 'link.php?p=' . $selectedProfile,
+                    $host . 'image.php?p=' . $selectedProfile
+                )
+                ->renderSeparator();
+            ?>
+
+            <h3>Obrázek:</h3>
+
             <div style="padding-top: 10px;">
-                <input type="submit" name="save" value="Potvrdit"/>
+                <label>
+                    Nastavit nový obrázek:
+                    <input type="file" name="image"/>
+                </label>
             </div>
         </form>
         <?php
@@ -90,7 +107,7 @@ class Render
     {
         ?>
         <div>
-            <div style="padding-top: 10px;">
+            <div style="padding-top: 20px;">
                 <label>
                     <strong>Možné použití v e-mailu:</strong>
                     <br>
@@ -111,7 +128,7 @@ class Render
      * @param EmailLinkEntity $emailLink
      * @return self
      */
-    public function renderPreview(EmailLinkEntity $emailLink)
+    public function renderImagePreview(EmailLinkEntity $emailLink)
     {
         ?>
         <div>
@@ -151,7 +168,7 @@ class Render
      * @param int $selectedProfile
      * @return self
      */
-    public function renderProfileSelector(array $profiles, $selectedProfile)
+    public function renderProfile(array $profiles, $selectedProfile)
     {
         ?>
         <div>
@@ -177,7 +194,6 @@ class Render
             <button type="button" id="js-profile-rename" data-profile-id="<?php echo $selectedProfile;?>">
                 Přejmenovat aktuální profil
             </button>
-            <br><br>
 
             <button type="button" id="js-profile-remove" data-profile-id="<?php echo $selectedProfile;?>">
                 Odstranit aktuální profil
