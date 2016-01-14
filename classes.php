@@ -250,14 +250,9 @@ class Admin
             ->renderHeader()
             ->renderTitle()
             ->renderFlashMessages($this->flashMessages->getMessages())
-            ->renderProfileSelector($profiles, $this->selectedProfile)
-            ->renderForm($emailLink)
-            ->renderSeparator()
-            ->renderUsage(
-                $host . 'link.php?p=' . $this->selectedProfile,
-                $host . 'image.php?p=' . $this->selectedProfile
-            )
-            ->renderPreview($emailLink)
+            ->renderProfile($profiles, $this->selectedProfile)
+            ->renderForm($emailLink, $host, $this->selectedProfile)
+            ->renderImagePreview($emailLink)
             ->renderFooter();
     }
 }
